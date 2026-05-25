@@ -180,12 +180,13 @@ class NovelGeneratorGUI:
         build_other_settings_tab(self)
 
         # English Mode Button
+        import config_manager
+        btn_text = "to Chinese mode" if config_manager.IS_ENGLISH else "to English mode"
         self.english_mode_btn = ctk.CTkButton(
             self.master, 
-            text="to English mode", 
+            text=btn_text, 
             width=100, 
             height=20,
-            
             command=self.toggle_english_mode
         )
         self.english_mode_btn.place(relx=0.98, rely=0.015, anchor="ne")
@@ -394,24 +395,32 @@ class NovelGeneratorGUI:
         import config_manager
         import importlib
         import prompt_definitions
+        import sys
+        import subprocess
         
         config_manager.IS_ENGLISH = not config_manager.IS_ENGLISH
         
+        # 保存语言设置到 config.json
+        self.loaded_config["is_english"] = config_manager.IS_ENGLISH
+        save_config(self.loaded_config, self.config_file)
+        
         try:
             if config_manager.IS_ENGLISH:
-                self.english_mode_btn.configure(text="to Chinese mode")
-                # Load English prompts and inject them into prompt_definitions module
+                # 重新加载英语 prompts 并注入 prompt_definitions 模块
                 source_module = importlib.import_module('prompt_definitions_en')
                 importlib.reload(source_module)
                 for attr in dir(source_module):
                     if not attr.startswith('__'):
                         setattr(prompt_definitions, attr, getattr(source_module, attr))
+                self.log("Switched to English Mode")
             else:
-                self.english_mode_btn.configure(text="to English mode")
-                # Reload prompt_definitions to restore original Chinese strings from file
+                # 重新加载中文 prompts
                 importlib.reload(prompt_definitions)
-            
-            self.log(f"已切换到 {'英文' if config_manager.IS_ENGLISH else '中文'} 模式")
+                self.log("已切换到中文模式")
+                
+            # 无缝启动新进程并销毁当前进程窗口
+            subprocess.Popen([sys.executable] + sys.argv)
+            self.master.destroy()
         except Exception as e:
             self.log(f"切换模式失败: {str(e)}")
 

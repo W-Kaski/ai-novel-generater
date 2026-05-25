@@ -8,7 +8,9 @@ def build_main_tab(self):
     """
     主Tab包含左侧的"本章内容"编辑框和输出日志，以及右侧的主要操作和参数设置区
     """
-    self.main_tab = self.tabview.add("Main Functions")
+    import config_manager
+    title = "Main Functions" if config_manager.IS_ENGLISH else "主要功能"
+    self.main_tab = self.tabview.add(title)
     self.main_tab.rowconfigure(0, weight=1)
     self.main_tab.columnconfigure(0, weight=1)
     self.main_tab.columnconfigure(1, weight=0)
@@ -23,6 +25,7 @@ def build_main_tab(self):
     build_right_layout(self)
 
 from utils import get_word_count
+from ui.helpers import get_text
 
 def build_left_layout(self):
     """
@@ -35,7 +38,8 @@ def build_left_layout(self):
     self.left_frame.grid_rowconfigure(4, weight=1)
     self.left_frame.columnconfigure(0, weight=1)
 
-    self.chapter_label = ctk.CTkLabel(self.left_frame, text="本章内容（可编辑）  字数：0", font=("Microsoft YaHei", 12))
+    initial_text = get_text("chapter_editable_label", "本章内容（可编辑）  字数: {}").format(0)
+    self.chapter_label = ctk.CTkLabel(self.left_frame, text=initial_text, font=("Microsoft YaHei", 12))
     self.chapter_label.grid(row=0, column=0, padx=5, pady=(5, 0), sticky="w")
 
     # 章节文本编辑框
@@ -43,12 +47,10 @@ def build_left_layout(self):
     TextWidgetContextMenu(self.chapter_result)
     self.chapter_result.grid(row=1, column=0, sticky="nsew", padx=5, pady=(0, 5))
 
-
-
     def update_word_count(event=None):
         text = self.chapter_result.get("0.0", "end-1c")
         count = get_word_count(text)
-        self.chapter_label.configure(text=f"本章内容（可编辑）  字数：{count}")
+        self.chapter_label.configure(text=get_text("chapter_editable_label", "本章内容（可编辑）  字数: {}").format(count))
 
     self.chapter_result.bind("<KeyRelease>", update_word_count)
     self.chapter_result.bind("<ButtonRelease>", update_word_count)
@@ -58,10 +60,9 @@ def build_left_layout(self):
     self.step_buttons_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
     self.step_buttons_frame.columnconfigure((0, 1, 2, 3, 4), weight=1)
 
-
     self.btn_generate_architecture = ctk.CTkButton(
         self.step_buttons_frame,
-        text="Step1. 生成架构",
+        text=get_text("btn_generate_architecture", "Step1. 生成架构"),
         command=self.generate_novel_architecture_ui,
         font=("Microsoft YaHei", 12)
     )
@@ -69,7 +70,7 @@ def build_left_layout(self):
 
     self.btn_generate_directory = ctk.CTkButton(
         self.step_buttons_frame,
-        text="Step2. 生成目录",
+        text=get_text("btn_generate_directory", "Step2. 生成目录"),
         command=self.generate_chapter_blueprint_ui,
         font=("Microsoft YaHei", 12)
     )
@@ -77,7 +78,7 @@ def build_left_layout(self):
 
     self.btn_generate_chapter = ctk.CTkButton(
         self.step_buttons_frame,
-        text="Step3. 生成草稿",
+        text=get_text("btn_generate_chapter", "Step3. 生成草稿"),
         command=self.generate_chapter_draft_ui,
         font=("Microsoft YaHei", 12)
     )
@@ -85,7 +86,7 @@ def build_left_layout(self):
 
     self.btn_finalize_chapter = ctk.CTkButton(
         self.step_buttons_frame,
-        text="Step4. 定稿章节",
+        text=get_text("btn_finalize_chapter", "Step4. 定稿章节"),
         command=self.finalize_chapter_ui,
         font=("Microsoft YaHei", 12)
     )
@@ -93,15 +94,14 @@ def build_left_layout(self):
 
     self.btn_batch_generate = ctk.CTkButton(
         self.step_buttons_frame,
-        text="批量生成",
+        text=get_text("btn_batch_generate", "批量生成"),
         command=self.generate_batch_ui,
         font=("Microsoft YaHei", 12)
     )
     self.btn_batch_generate.grid(row=0, column=4, padx=5, pady=2, sticky="ew")
 
-
     # 日志文本框
-    log_label = ctk.CTkLabel(self.left_frame, text="输出日志 (只读)", font=("Microsoft YaHei", 12))
+    log_label = ctk.CTkLabel(self.left_frame, text=get_text("log_label", "输出日志 (只读)"), font=("Microsoft YaHei", 12))
     log_label.grid(row=3, column=0, padx=5, pady=(5, 0), sticky="w")
 
     self.log_text = ctk.CTkTextbox(self.left_frame, wrap="word", font=("Microsoft YaHei", 12))

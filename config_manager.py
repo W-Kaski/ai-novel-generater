@@ -22,7 +22,10 @@ def load_config(config_file: str) -> dict:
     try:
         with _config_lock:
             with open(config_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                data = json.load(f)
+                global IS_ENGLISH
+                IS_ENGLISH = data.get("is_english", False)
+                return data
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
         logging.error(f"配置文件格式错误: {e}")
         return {}
@@ -35,6 +38,7 @@ def load_config(config_file: str) -> dict:
 def create_config(config_file: str) -> dict:
     """创建一个创建默认配置文件。"""
     config = {
+    "is_english": False,
     "last_interface_format": "OpenAI",
     "last_embedding_interface_format": "OpenAI",
     "llm_configs": {

@@ -5,20 +5,24 @@ import customtkinter as ctk
 from tkinter import messagebox
 from utils import read_file, save_string_to_txt, clear_file_content, get_word_count
 from ui.context_menu import TextWidgetContextMenu
+from ui.helpers import get_text
 
 def build_setting_tab(self):
-    self.setting_tab = self.tabview.add("Novel Architecture")
+    import config_manager
+    title = "Novel Architecture" if config_manager.IS_ENGLISH else "小说设定"
+    self.setting_tab = self.tabview.add(title)
     self.setting_tab.rowconfigure(0, weight=0)
     self.setting_tab.rowconfigure(1, weight=1)
     self.setting_tab.columnconfigure(0, weight=1)
 
-    load_btn = ctk.CTkButton(self.setting_tab, text="加载 Novel_architecture.txt", command=self.load_novel_architecture, font=("Microsoft YaHei", 12))
+    load_btn = ctk.CTkButton(self.setting_tab, text=get_text("load_setting_btn", "加载 Novel_architecture.txt"), command=self.load_novel_architecture, font=("Microsoft YaHei", 12))
     load_btn.grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
-    self.setting_word_count_label = ctk.CTkLabel(self.setting_tab, text="字数：0", font=("Microsoft YaHei", 12))
+    initial_wc_text = get_text("word_count", "字数: {}").format(0)
+    self.setting_word_count_label = ctk.CTkLabel(self.setting_tab, text=initial_wc_text, font=("Microsoft YaHei", 12))
     self.setting_word_count_label.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
-    save_btn = ctk.CTkButton(self.setting_tab, text="保存修改", command=self.save_novel_architecture, font=("Microsoft YaHei", 12))
+    save_btn = ctk.CTkButton(self.setting_tab, text=get_text("save_changes", "保存修改"), command=self.save_novel_architecture, font=("Microsoft YaHei", 12))
     save_btn.grid(row=0, column=2, padx=5, pady=5, sticky="e")
 
     self.setting_text = ctk.CTkTextbox(self.setting_tab, wrap="word", font=("Microsoft YaHei", 12))
@@ -28,7 +32,7 @@ def build_setting_tab(self):
     def update_word_count(event=None):
         text = self.setting_text.get("0.0", "end-1c")
         count = get_word_count(text)
-        self.setting_word_count_label.configure(text=f"字数：{count}")
+        self.setting_word_count_label.configure(text=get_text("word_count", "字数: {}").format(count))
 
     self.setting_text.bind("<KeyRelease>", update_word_count)
     self.setting_text.bind("<ButtonRelease>", update_word_count)
@@ -36,21 +40,21 @@ def build_setting_tab(self):
 def load_novel_architecture(self):
     filepath = self.filepath_var.get().strip()
     if not filepath:
-        messagebox.showwarning("警告", "请先设置保存文件路径")
+        messagebox.showwarning(get_text("warning", "警告"), get_text("set_path_warning", "请先设置保存文件路径"))
         return
     filename = os.path.join(filepath, "Novel_architecture.txt")
     content = read_file(filename)
     self.setting_text.delete("0.0", "end")
     self.setting_text.insert("0.0", content)
-    self.log("已加载 Novel_architecture.txt 内容到编辑区。")
+    self.log(get_text("loaded_setting_log", "已加载 Novel_architecture.txt 内容到编辑区。"))
 
 def save_novel_architecture(self):
     filepath = self.filepath_var.get().strip()
     if not filepath:
-        messagebox.showwarning("警告", "请先设置保存文件路径。")
+        messagebox.showwarning(get_text("warning", "警告"), get_text("set_path_warning", "请先设置保存文件路径"))
         return
     content = self.setting_text.get("0.0", "end").strip()
     filename = os.path.join(filepath, "Novel_architecture.txt")
     clear_file_content(filename)
     save_string_to_txt(content, filename)
-    self.log("已保存对 Novel_architecture.txt 的修改。")
+    self.log(get_text("saved_setting_log", "已保存对 Novel_architecture.txt 的修改。"))
