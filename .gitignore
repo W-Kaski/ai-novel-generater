@@ -13,6 +13,8 @@ config.json
 config_test.json
 .idea/
 /novel
+/novels/
+/.venv-linux/
 app.log
 test.py
 /backup
