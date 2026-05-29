@@ -1,12 +1,13 @@
-#novel_generator/architecture.py
+﻿#novel_generator/architecture.py
 # -*- coding: utf-8 -*-
 """
-小说总体架构生成（Novel_architecture_generate 及相关辅助函数）
+小说总体架构生成（novel_settings_generate 及相关辅助函数）
 """
 import os
 import json
 import logging
 import traceback
+import re
 from novel_generator.common import invoke_with_cleaning
 from llm_adapters import create_llm_adapter
 import prompt_definitions
@@ -17,7 +18,43 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
-from utils import clear_file_content, save_string_to_txt
+from utils import clear_file_content, save_string_to_txt, ensure_project_structure, resolve_text_path
+
+
+def save_initial_roles_to_library(filepath: str, character_text: str) -> None:
+    """Save generated character and faction profiles into the standard character folders."""
+    role_root = os.path.join(filepath, "03_characters")
+    os.makedirs(role_root, exist_ok=True)
+    main_dir = os.path.join(role_root, "主要角色")
+    supporting_dir = os.path.join(role_root, "重要配角")
+    faction_dir = os.path.join(role_root, "阵营与规则")
+    for directory in (main_dir, supporting_dir, faction_dir):
+        os.makedirs(directory, exist_ok=True)
+
+    sections = []
+    for match in re.finditer(r"(?m)^##\s+(.+?)\s*$", character_text):
+        sections.append((match.start(), match.end(), match.group(1).strip()))
+
+    if not sections:
+        save_string_to_txt(character_text, os.path.join(main_dir, "核心角色档案.md"))
+        return
+
+    invalid_chars = '<>:"/\\|?*'
+    for idx, (_, end, title) in enumerate(sections):
+        next_start = sections[idx + 1][0] if idx + 1 < len(sections) else len(character_text)
+        body = character_text[end:next_start].strip()
+        normalized_title = re.sub(r"^(主要角色|重要配角|配角|阵营|势力|组织|规则)[：:\-\s]+", "", title).strip()
+        safe_title = "".join("_" if ch in invalid_chars or ord(ch) < 32 else ch for ch in normalized_title).strip(" .")
+        safe_title = safe_title or "未命名档案"
+
+        if any(keyword in title for keyword in ("阵营", "势力", "组织", "规则", "宗门")):
+            target_dir = faction_dir
+        elif any(keyword in title for keyword in ("配角", "盟友", "反派", "对手")):
+            target_dir = supporting_dir
+        else:
+            target_dir = main_dir
+
+        save_string_to_txt(f"# {normalized_title}\n\n{body}\n", os.path.join(target_dir, f"{safe_title}.md"))
 
 def load_partial_architecture_data(filepath: str) -> dict:
     """
@@ -46,7 +83,7 @@ def save_partial_architecture_data(filepath: str, data: dict):
     except Exception as e:
         logging.warning(f"Failed to save partial_architecture.json: {e}")
 
-def Novel_architecture_generate(
+def novel_settings_generate(
     interface_format: str,
     api_key: str,
     base_url: str,
@@ -69,14 +106,32 @@ def Novel_architecture_generate(
       4. plot_architecture_prompt
     若在中间任何一步报错且重试多次失败，则将已经生成的内容写入 partial_architecture.json 并退出；
     下次调用时可从该步骤继续。
-    最终输出 Novel_architecture.txt
+    最终输出 novel_settings.md
 
     新增：
-    - 在完成角色动力学设定后，依据该角色体系，使用 create_character_state_prompt 生成初始角色状态表，
-      并存储到 character_state.txt，后续维护更新。
+    - 在完成角色动力学设定后，依据该角色体系，使用 create_character_state_prompt 生成静态角色与阵营档案，
+      并存储到 03_characters；character_state.md 仅作为后续章节推进的当前角色状态。
     """
     os.makedirs(filepath, exist_ok=True)
+    ensure_project_structure(filepath)
+    
+    # 自动加载深度设定并拼接到 user_guidance
+    try:
+        config_path = "config.json"
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            deep_settings = cfg.get("deep_settings")
+            if deep_settings:
+                from utils import format_deep_settings_for_prompt
+                ds_block = format_deep_settings_for_prompt(deep_settings)
+                if ds_block:
+                    user_guidance = (user_guidance + "\n" + ds_block).strip()
+    except Exception as e:
+        logging.warning(f"Failed to format deep settings in architecture generation: {e}")
+
     partial_data = load_partial_architecture_data(filepath)
+
     llm_adapter = create_llm_adapter(
         interface_format=interface_format,
         base_url=base_url,
@@ -121,9 +176,9 @@ def Novel_architecture_generate(
         save_partial_architecture_data(filepath, partial_data)
     else:
         logging.info("Step2 already done. Skipping...")
-    # 生成初始角色状态
+    # 生成静态角色与阵营档案。档案进入 03_characters，character_state.md 只保留章节推进后的动态状态。
     if "character_dynamics_result" in partial_data and "character_state_result" not in partial_data:
-        logging.info("Generating initial character state from character dynamics ...")
+        logging.info("Generating static character and faction profiles from character dynamics ...")
         prompt_char_state_init = prompt_definitions.create_character_state_prompt.format(
             character_dynamics=partial_data["character_dynamics_result"].strip()
         )
@@ -133,11 +188,12 @@ def Novel_architecture_generate(
             save_partial_architecture_data(filepath, partial_data)
             return
         partial_data["character_state_result"] = character_state_init
-        character_state_file = os.path.join(filepath, "character_state.txt")
+        save_initial_roles_to_library(filepath, character_state_init)
+        character_state_file = resolve_text_path(os.path.join(filepath, "character_state.md"), for_write=True)
         clear_file_content(character_state_file)
-        save_string_to_txt(character_state_init, character_state_file)
+        save_string_to_txt("# 当前角色状态\n\n", character_state_file)
         save_partial_architecture_data(filepath, partial_data)
-        logging.info("Initial character state created and saved.")
+        logging.info("Initial role profiles created in 03_characters; current character state reset.")
     # Step3: 世界观
     if "world_building_result" not in partial_data:
         logging.info("Step3: Generating world_building_prompt ...")
@@ -191,12 +247,13 @@ def Novel_architecture_generate(
         f"{plot_arch_result}\n"
     )
 
-    arch_file = os.path.join(filepath, "Novel_architecture.txt")
-    clear_file_content(arch_file)
-    save_string_to_txt(final_content, arch_file)
-    logging.info("Novel_architecture.txt has been generated successfully.")
+    settings_file = resolve_text_path(os.path.join(filepath, "novel_settings.md"), for_write=True)
+    clear_file_content(settings_file)
+    save_string_to_txt(final_content, settings_file)
+    logging.info("novel_settings.md has been generated successfully.")
 
     partial_arch_file = os.path.join(filepath, "partial_architecture.json")
     if os.path.exists(partial_arch_file):
         os.remove(partial_arch_file)
         logging.info("partial_architecture.json removed (all steps completed).")
+

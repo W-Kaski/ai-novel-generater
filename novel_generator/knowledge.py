@@ -7,7 +7,6 @@ import os
 import logging
 import re
 import traceback
-import nltk
 import warnings
 from utils import read_file
 from novel_generator.vectorstore_utils import load_vector_store, init_vector_store
@@ -24,12 +23,17 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 def advanced_split_content(content: str, similarity_threshold: float = 0.7, max_length: int = 500) -> list:
-    """使用基本分段策略"""
-    # nltk.download('punkt', quiet=True)
-    # nltk.download('punkt_tab', quiet=True)
-    sentences = nltk.sent_tokenize(content)
+    """使用适合中文资料的基本分段策略，不依赖外部分词数据包。"""
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n+", content) if p.strip()]
+    sentences = []
+    for paragraph in paragraphs:
+        sentences.extend(
+            part.strip()
+            for part in re.split(r"(?<=[。！？!?；;])\s*", paragraph)
+            if part.strip()
+        )
     if not sentences:
-        return []
+        sentences = [content.strip()] if content.strip() else []
 
     final_segments = []
     current_segment = []
@@ -37,9 +41,21 @@ def advanced_split_content(content: str, similarity_threshold: float = 0.7, max_
     
     for sentence in sentences:
         sentence_length = len(sentence)
+        if sentence_length > max_length:
+            if current_segment:
+                final_segments.append("".join(current_segment))
+                current_segment = []
+                current_length = 0
+            final_segments.extend(
+                sentence[i:i + max_length].strip()
+                for i in range(0, sentence_length, max_length)
+                if sentence[i:i + max_length].strip()
+            )
+            continue
+
         if current_length + sentence_length > max_length:
             if current_segment:
-                final_segments.append(" ".join(current_segment))
+                final_segments.append("".join(current_segment))
             current_segment = [sentence]
             current_length = sentence_length
         else:
@@ -47,7 +63,7 @@ def advanced_split_content(content: str, similarity_threshold: float = 0.7, max_
             current_length += sentence_length
     
     if current_segment:
-        final_segments.append(" ".join(current_segment))
+        final_segments.append("".join(current_segment))
     
     return final_segments
 

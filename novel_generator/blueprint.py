@@ -1,4 +1,4 @@
-#novel_generator/blueprint.py
+﻿#novel_generator/blueprint.py
 # -*- coding: utf-8 -*-
 """
 章节蓝图生成（Chapter_blueprint_generate 及辅助函数）
@@ -9,7 +9,7 @@ import logging
 from novel_generator.common import invoke_with_cleaning
 from llm_adapters import create_llm_adapter
 import prompt_definitions
-from utils import read_file, clear_file_content, save_string_to_txt
+from utils import read_file, clear_file_content, save_string_to_txt, resolve_text_path, text_file_exists, ensure_project_structure
 logging.basicConfig(
     filename='app.log',      # 日志文件名
     filemode='a',            # 追加模式（'w' 会覆盖）
@@ -60,22 +60,22 @@ def Chapter_blueprint_generate(
     timeout: int = 600
 ) -> None:
     """
-    若 Novel_directory.txt 已存在且内容非空，则表示可能是之前的部分生成结果；
+    若 novel_directory.md 已存在且内容非空，则表示可能是之前的部分生成结果；
       解析其中已有的章节数，从下一个章节继续分块生成；
       对于已有章节目录，传入时仅保留最近100章目录，避免prompt过长。
     否则：
       - 若章节数 <= chunk_size，直接一次性生成
       - 若章节数 > chunk_size，进行分块生成
-    生成完成后输出至 Novel_directory.txt。
+    生成完成后输出至 novel_directory.md。
     """
-    arch_file = os.path.join(filepath, "Novel_architecture.txt")
-    if not os.path.exists(arch_file):
-        logging.warning("Novel_architecture.txt not found. Please generate architecture first.")
+    settings_file = resolve_text_path(os.path.join(filepath, "novel_settings.md"))
+    if not os.path.exists(settings_file):
+        logging.warning("novel_settings.md not found. Please generate settings first.")
         return
 
-    architecture_text = read_file(arch_file).strip()
-    if not architecture_text:
-        logging.warning("Novel_architecture.txt is empty.")
+    settings_text = read_file(settings_file).strip()
+    if not settings_text:
+        logging.warning("novel_settings.md is empty.")
         return
 
     llm_adapter = create_llm_adapter(
@@ -88,7 +88,7 @@ def Chapter_blueprint_generate(
         timeout=timeout
     )
 
-    filename_dir = os.path.join(filepath, "Novel_directory.txt")
+    filename_dir = resolve_text_path(os.path.join(filepath, "novel_directory.md"), for_write=True)
     if not os.path.exists(filename_dir):
         open(filename_dir, "w", encoding="utf-8").close()
 
@@ -109,7 +109,7 @@ def Chapter_blueprint_generate(
             current_end = min(current_start + chunk_size - 1, number_of_chapters)
             limited_blueprint = limit_chapter_blueprint(final_blueprint, 100)
             chunk_prompt = prompt_definitions.chunked_chapter_blueprint_prompt.format(
-                novel_architecture=architecture_text,
+                novel_settings=settings_text,
                 chapter_list=limited_blueprint,
                 number_of_chapters=number_of_chapters,
                 n=current_start,
@@ -133,7 +133,7 @@ def Chapter_blueprint_generate(
 
     if chunk_size >= number_of_chapters:
         prompt = prompt_definitions.chapter_blueprint_prompt.format(
-            novel_architecture=architecture_text,
+            novel_settings=settings_text,
             number_of_chapters=number_of_chapters,
             user_guidance=user_guidance  # 新增参数
         )
@@ -144,7 +144,7 @@ def Chapter_blueprint_generate(
 
         clear_file_content(filename_dir)
         save_string_to_txt(blueprint_text, filename_dir)
-        logging.info("Novel_directory.txt (chapter blueprint) has been generated successfully (single-shot).")
+        logging.info("novel_directory.md (chapter blueprint) has been generated successfully (single-shot).")
         return
 
     logging.info("Will generate chapter blueprint in chunked mode from scratch.")
@@ -154,7 +154,7 @@ def Chapter_blueprint_generate(
         current_end = min(current_start + chunk_size - 1, number_of_chapters)
         limited_blueprint = limit_chapter_blueprint(final_blueprint, 100)
         chunk_prompt = prompt_definitions.chunked_chapter_blueprint_prompt.format(
-            novel_architecture=architecture_text,
+            novel_settings=settings_text,
             chapter_list=limited_blueprint,
             number_of_chapters=number_of_chapters,
             n=current_start,
@@ -176,4 +176,5 @@ def Chapter_blueprint_generate(
         save_string_to_txt(final_blueprint.strip(), filename_dir)
         current_start = current_end + 1
 
-    logging.info("Novel_directory.txt (chapter blueprint) has been generated successfully (chunked).")
+    logging.info("novel_directory.md (chapter blueprint) has been generated successfully (chunked).")
+

@@ -6,8 +6,7 @@
 import os
 import logging
 import traceback
-import nltk
-import numpy as np
+import re
 import ssl
 import warnings
 from langchain_chroma import Chroma
@@ -144,27 +143,37 @@ def split_by_length(text: str, max_length: int = 500):
 def split_text_for_vectorstore(chapter_text: str, max_length: int = 500, similarity_threshold: float = 0.7):
     """
     对新的章节文本进行分段后,再用于存入向量库。
-    使用 embedding 进行文本相似度计算。
+    中文小说优先按段落和中文标点切分，避免依赖 NLTK punkt 数据包。
     """
     if not chapter_text.strip():
         return []
-    
-    # nltk.download('punkt', quiet=True)
-    # nltk.download('punkt_tab', quiet=True)
-    sentences = nltk.sent_tokenize(chapter_text)
+
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n+", chapter_text) if p.strip()]
+    sentences = []
+    for paragraph in paragraphs:
+        parts = re.split(r"(?<=[。！？!?；;])\s*", paragraph)
+        sentences.extend(part.strip() for part in parts if part.strip())
+
     if not sentences:
-        return []
-    
-    # 直接按长度分段,不做相似度合并
+        sentences = [chapter_text.strip()]
+
     final_segments = []
     current_segment = []
     current_length = 0
     
     for sentence in sentences:
         sentence_length = len(sentence)
+        if sentence_length > max_length:
+            if current_segment:
+                final_segments.append("".join(current_segment))
+                current_segment = []
+                current_length = 0
+            final_segments.extend(split_by_length(sentence, max_length))
+            continue
+
         if current_length + sentence_length > max_length:
             if current_segment:
-                final_segments.append(" ".join(current_segment))
+                final_segments.append("".join(current_segment))
             current_segment = [sentence]
             current_length = sentence_length
         else:
@@ -172,7 +181,7 @@ def split_text_for_vectorstore(chapter_text: str, max_length: int = 500, similar
             current_length += sentence_length
     
     if current_segment:
-        final_segments.append(" ".join(current_segment))
+        final_segments.append("".join(current_segment))
     
     return final_segments
 

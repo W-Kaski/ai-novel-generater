@@ -10,7 +10,7 @@ from llm_adapters import create_llm_adapter
 from embedding_adapters import create_embedding_adapter
 import prompt_definitions
 from novel_generator.common import invoke_with_cleaning
-from utils import read_file
+from utils import read_file, resolve_text_path, chapters_drafts_dir, ensure_project_structure
 from novel_generator.vectorstore_utils import update_vector_store
 logging.basicConfig(
     filename='app.log',      # 日志文件名
@@ -51,19 +51,18 @@ def finalize_chapter(
     timeout: int = 600
 ):
     """
-    对指定章节做最终处理：更新前文摘要、更新角色状态、插入向量库等。
+    对指定章节做最终处理：更新角色状态、插入向量库等。
     默认无需再做扩写操作，若有需要可在外部调用 enrich_chapter_text 处理后再定稿。
     """
-    chapters_dir = os.path.join(filepath, "chapters")
-    chapter_file = os.path.join(chapters_dir, f"chapter_{novel_number}.txt")
+    ensure_project_structure(filepath)
+    chapters_dir = chapters_drafts_dir(filepath)
+    chapter_file = os.path.join(chapters_dir, f"chapter_{novel_number}.md")
     chapter_text = read_file(chapter_file).strip()
     if not chapter_text:
         logging.warning(f"Chapter {novel_number} is empty, cannot finalize.")
         return
 
-    global_summary_file = os.path.join(filepath, "global_summary.txt")
-    old_global_summary = read_file(global_summary_file)
-    character_state_file = os.path.join(filepath, "character_state.txt")
+    character_state_file = resolve_text_path(os.path.join(filepath, "character_state.md"), for_write=True)
     old_character_state = read_file(character_state_file)
 
     llm_adapter = create_llm_adapter(
@@ -76,14 +75,6 @@ def finalize_chapter(
         timeout=timeout
     )
 
-    prompt_summary = prompt_definitions.summary_prompt.format(
-        chapter_text=chapter_text,
-        global_summary=old_global_summary
-    )
-    new_global_summary = invoke_with_cleaning(llm_adapter, prompt_summary)
-    if not new_global_summary.strip():
-        new_global_summary = old_global_summary
-
     prompt_char_state = prompt_definitions.update_character_state_prompt.format(
         chapter_text=chapter_text,
         old_state=old_character_state
@@ -92,7 +83,6 @@ def finalize_chapter(
     if not new_char_state.strip():
         new_char_state = old_character_state
 
-    _write_text_atomic(global_summary_file, new_global_summary)
     _write_text_atomic(character_state_file, new_char_state)
 
     try:

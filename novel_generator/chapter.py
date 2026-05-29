@@ -1,4 +1,4 @@
-# novel_generator/chapter.py
+﻿# novel_generator/chapter.py
 # -*- coding: utf-8 -*-
 """
 章节草稿生成及获取历史章节文本、当前章节摘要等
@@ -11,7 +11,7 @@ from llm_adapters import create_llm_adapter
 import prompt_definitions
 from chapter_directory_parser import get_chapter_info_from_blueprint
 from novel_generator.common import invoke_with_cleaning
-from utils import read_file, clear_file_content, save_string_to_txt
+from utils import read_file, clear_file_content, save_string_to_txt, resolve_text_path, text_file_exists, chapters_drafts_dir, ensure_project_structure
 from novel_generator.vectorstore_utils import (
     get_relevant_context_from_vector_store,
     load_vector_store  # 添加导入
@@ -31,8 +31,8 @@ def get_last_n_chapters_text(chapters_dir: str, current_chapter_num: int, n: int
     texts = []
     start_chap = max(1, current_chapter_num - n)
     for c in range(start_chap, current_chapter_num):
-        chap_file = os.path.join(chapters_dir, f"chapter_{c}.txt")
-        if os.path.exists(chap_file):
+        chap_file = os.path.join(chapters_dir, f"chapter_{c}.md")
+        if text_file_exists(chap_file):
             text = read_file(chap_file).strip()
             texts.append(text)
         else:
@@ -166,7 +166,7 @@ def format_chapter_info(chapter_info: dict) -> str:
     )
 
 def parse_search_keywords(response_text: str) -> list:
-    """解析新版关键词格式（示例输入：'科技公司·数据泄露\n地下实验室·基因编辑'）"""
+    """解析新版关键词格式（示例输入：'李火旺·心素·代价\n牛心村·坐忘道·误导'）"""
     return [
         line.strip().replace('·', ' ')
         for line in response_text.strip().split('\n')
@@ -311,29 +311,30 @@ def build_chapter_prompt(
     2. 新增内容重复检测机制
     3. 集成提示词应用规则
     """
-    # 读取基础文件
-    arch_file = os.path.join(filepath, "Novel_architecture.txt")
-    novel_architecture_text = read_file(arch_file)
-    directory_file = os.path.join(filepath, "Novel_directory.txt")
-    blueprint_text = read_file(directory_file)
-    global_summary_file = os.path.join(filepath, "global_summary.txt")
-    global_summary_text = read_file(global_summary_file)
-    character_state_file = os.path.join(filepath, "character_state.txt")
-    character_state_text = read_file(character_state_file)
+    # 读取大纲与世界观设定
+    settings_file = resolve_text_path(os.path.join(filepath, "novel_settings.md"))
+    novel_settings_text = read_file(settings_file)
     
-    # 获取章节信息
+    # 章节目录蓝图
+    directory_file = resolve_text_path(os.path.join(filepath, "novel_directory.md"))
+    blueprint_text = read_file(directory_file)
+    
+    # 动态角色状态 (Character Space)
+    character_state_file = resolve_text_path(os.path.join(filepath, "character_state.md"))
+    character_state_text = read_file(character_state_file)
+    # Parse current and next chapter metadata from the blueprint
     chapter_info = get_chapter_info_from_blueprint(blueprint_text, novel_number)
-    chapter_title = chapter_info["chapter_title"]
-    chapter_role = chapter_info["chapter_role"]
-    chapter_purpose = chapter_info["chapter_purpose"]
-    suspense_level = chapter_info["suspense_level"]
-    foreshadowing = chapter_info["foreshadowing"]
-    plot_twist_level = chapter_info["plot_twist_level"]
-    chapter_summary = chapter_info["chapter_summary"]
-
-    # 获取下一章节信息
     next_chapter_number = novel_number + 1
     next_chapter_info = get_chapter_info_from_blueprint(blueprint_text, next_chapter_number)
+
+    chapter_title = chapter_info.get("chapter_title", f"第{novel_number}章")
+    chapter_role = chapter_info.get("chapter_role", "常规章节")
+    chapter_purpose = chapter_info.get("chapter_purpose", "内容推进")
+    suspense_level = chapter_info.get("suspense_level", "中等")
+    foreshadowing = chapter_info.get("foreshadowing", "无")
+    plot_twist_level = chapter_info.get("plot_twist_level", "★☆☆☆☆")
+    chapter_summary = chapter_info.get("chapter_summary", "")
+
     next_chapter_title = next_chapter_info.get("chapter_title", "（未命名）")
     next_chapter_role = next_chapter_info.get("chapter_role", "过渡章节")
     next_chapter_purpose = next_chapter_info.get("chapter_purpose", "承上启下")
@@ -342,9 +343,16 @@ def build_chapter_prompt(
     next_chapter_twist = next_chapter_info.get("plot_twist_level", "★☆☆☆☆")
     next_chapter_summary = next_chapter_info.get("chapter_summary", "衔接过渡内容")
 
+    # Load character track and foreshadowing ledger memory
+    plot_arcs_file = resolve_text_path(os.path.join(filepath, "plot_arcs.md"))
+    plot_arcs_text = read_file(plot_arcs_file) or "（当前无人物轨时间线）"
+
+    foreshadowing_ledger_file = resolve_text_path(os.path.join(filepath, "foreshadowing_ledger.md"))
+    foreshadowing_ledger_text = read_file(foreshadowing_ledger_file) or "（当前无伏笔记录）"
+
     # 创建章节目录
-    chapters_dir = os.path.join(filepath, "chapters")
-    os.makedirs(chapters_dir, exist_ok=True)
+    ensure_project_structure(filepath)
+    chapters_dir = chapters_drafts_dir(filepath)
 
     # 第一章特殊处理
     if novel_number == 1:
@@ -363,7 +371,7 @@ def build_chapter_prompt(
             scene_location=scene_location,
             time_constraint=time_constraint,
             user_guidance=user_guidance,
-            novel_setting=novel_architecture_text
+            novel_setting=novel_settings_text
         )
 
     # 获取前文内容和摘要
@@ -495,7 +503,8 @@ def build_chapter_prompt(
     # 返回最终提示词
     return prompt_definitions.next_chapter_draft_prompt.format(
         user_guidance=user_guidance if user_guidance else "无特殊指导",
-        global_summary=global_summary_text,
+        plot_arcs=plot_arcs_text,
+        foreshadowing_ledger=foreshadowing_ledger_text,
         previous_chapter_excerpt=previous_excerpt,
         character_state=character_state_text,
         short_summary=short_summary,
@@ -575,8 +584,8 @@ def generate_chapter_draft(
     else:
         prompt_text = custom_prompt_text
 
-    chapters_dir = os.path.join(filepath, "chapters")
-    os.makedirs(chapters_dir, exist_ok=True)
+    ensure_project_structure(filepath)
+    chapters_dir = chapters_drafts_dir(filepath)
 
     llm_adapter = create_llm_adapter(
         interface_format=interface_format,
@@ -592,8 +601,9 @@ def generate_chapter_draft(
     if not chapter_content.strip():
         logging.warning("Generated chapter draft is empty.")
         return ""
-    chapter_file = os.path.join(chapters_dir, f"chapter_{novel_number}.txt")
+    chapter_file = resolve_text_path(os.path.join(chapters_dir, f"chapter_{novel_number}.md"), for_write=True)
     clear_file_content(chapter_file)
     save_string_to_txt(chapter_content, chapter_file)
     logging.info(f"[Draft] Chapter {novel_number} generated as a draft.")
     return chapter_content
+
