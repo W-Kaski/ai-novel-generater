@@ -11,11 +11,8 @@ CONSISTENCY_PROMPT = """\
 - 角色状态（可能包含重要信息）：
 {character_state}
 
-- 前文摘要：
-{global_summary}
-
-- 已记录的未解决冲突或剧情要点：
-{plot_arcs}  # 若为空可能不输出
+- 章节蓝图、人物轨、伏笔台账等长期记忆：
+{memory_context}
 
 - 最新章节内容：
 {chapter_text}
@@ -26,26 +23,24 @@ CONSISTENCY_PROMPT = """\
 def check_consistency(
     novel_setting: str,
     character_state: str,
-    global_summary: str,
+    memory_context: str,
     chapter_text: str,
     api_key: str,
     base_url: str,
     model_name: str,
     temperature: float = 0.3,
-    plot_arcs: str = "",
     interface_format: str = "OpenAI",
     max_tokens: int = 2048,
     timeout: int = 600
 ) -> str:
     """
     调用模型做简单的一致性检查。可扩展更多提示或校验规则。
-    新增: 会额外检查对“未解决冲突或剧情要点”（plot_arcs）的衔接情况。
+    会额外检查章节蓝图、人物轨、伏笔台账等长期记忆的衔接情况。
     """
     prompt = CONSISTENCY_PROMPT.format(
         novel_setting=novel_setting,
         character_state=character_state,
-        global_summary=global_summary,
-        plot_arcs=plot_arcs,
+        memory_context=memory_context,
         chapter_text=chapter_text
     )
 

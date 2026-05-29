@@ -1,4 +1,4 @@
-# cli.py
+﻿# cli.py
 # -*- coding: utf-8 -*-
 """
 AI 小说生成器命令行控制器 (cli.py)
@@ -9,12 +9,12 @@ import sys
 import json
 import argparse
 from config_manager import load_config, save_config
-from novel_generator.architecture import Novel_architecture_generate
+from novel_generator.architecture import novel_settings_generate
 from novel_generator.blueprint import Chapter_blueprint_generate
 from novel_generator.chapter import generate_chapter_draft, build_chapter_prompt
 from novel_generator.finalization import finalize_chapter, enrich_chapter_text
 from consistency_checker import check_consistency
-from utils import read_file, save_string_to_txt
+from utils import read_file, save_string_to_txt, text_file_exists, chapters_drafts_dir, resolve_text_path
 
 CONFIG_FILE = "config.json"
 
@@ -98,8 +98,13 @@ def cmd_init(args):
 
     # 写入小说具体业务参数
     other = config.get("other_params", {})
+    if args.novel_name is not None: other["novel_name"] = args.novel_name
     if args.topic is not None: other["topic"] = args.topic
     if args.genre is not None: other["genre"] = args.genre
+    if args.target_audience is not None: other["target_audience"] = args.target_audience
+    if args.platform_style is not None: other["platform_style"] = args.platform_style
+    if args.writing_style is not None: other["writing_style"] = args.writing_style
+    if args.pacing_requirement is not None: other["pacing_requirement"] = args.pacing_requirement
     if args.num_chapters is not None: other["num_chapters"] = args.num_chapters
     if args.word_number is not None: other["word_number"] = args.word_number
     if args.filepath is not None: other["filepath"] = args.filepath
@@ -132,11 +137,21 @@ def cmd_step1(args):
     num_chapters = args.num_chapters or int(other.get("num_chapters", 10))
     word_number = args.word_number or int(other.get("word_number", 3000))
     user_guidance = args.guidance or other.get("user_guidance", "")
+    setting_guidance = "\n".join(
+        part for part in [
+            f"小说名称：{args.novel_name or other.get('novel_name', '')}" if (args.novel_name or other.get("novel_name", "")) else "",
+            f"目标读者：{args.target_audience or other.get('target_audience', '')}" if (args.target_audience or other.get("target_audience", "")) else "",
+            f"平台风格：{args.platform_style or other.get('platform_style', '')}" if (args.platform_style or other.get("platform_style", "")) else "",
+            f"语言风格：{args.writing_style or other.get('writing_style', '')}" if (args.writing_style or other.get("writing_style", "")) else "",
+            f"节奏要求：{args.pacing_requirement or other.get('pacing_requirement', '')}" if (args.pacing_requirement or other.get("pacing_requirement", "")) else "",
+            user_guidance,
+        ] if part
+    )
 
     print(f"🔄 正在调用 {llm.get('model_name')} 生成小说设定...")
     print(f"主题: {topic}\n类型: {genre}\n路径: {filepath}")
 
-    Novel_architecture_generate(
+    novel_settings_generate(
         interface_format=llm.get("interface_format", "OpenAI"),
         api_key=llm.get("api_key", ""),
         base_url=llm.get("base_url", ""),
@@ -149,9 +164,9 @@ def cmd_step1(args):
         temperature=llm.get("temperature", 0.7),
         max_tokens=llm.get("max_tokens", 8192),
         timeout=llm.get("timeout", 600),
-        user_guidance=user_guidance
+        user_guidance=setting_guidance
     )
-    print("✅ 小说设定 (Novel_architecture.txt) 生成成功！")
+    print("✅ 小说设定 (novel_settings.md) 生成成功！")
 
 def cmd_step2(args):
     """Step 2: 生成章节目录蓝图"""
@@ -180,7 +195,7 @@ def cmd_step2(args):
         timeout=llm.get("timeout", 600),
         user_guidance=user_guidance
     )
-    print("✅ 章节蓝图目录 (Novel_directory.txt) 生成完成！")
+    print("✅ 章节蓝图 (novel_directory.md) 生成完成！")
 
 def cmd_step3(args):
     """Step 3: 生成指定章节草稿"""
@@ -255,7 +270,7 @@ def cmd_step3(args):
     )
 
     if draft_text:
-        print(f"✅ 第 {chapter_num} 章草稿已成功生成，存放在 chapters/chapter_{chapter_num}.txt。")
+        print(f"✅ 第 {chapter_num} 章草稿已成功生成，存放在 01_chapters/chapter_{chapter_num}.md。")
         print("\n=== 草稿预览 ===")
         print(draft_text[:500] + "\n...(后文已省略)")
     else:
@@ -276,8 +291,8 @@ def cmd_step4(args):
     chapter_num = args.chapter or int(other.get("chapter_num", 1))
     word_number = args.word_number or int(other.get("word_number", 3000))
 
-    chapter_file = os.path.join(filepath, "chapters", f"chapter_{chapter_num}.txt")
-    if not os.path.exists(chapter_file):
+    chapter_file = os.path.join(chapters_drafts_dir(filepath), f"chapter_{chapter_num}.md")
+    if not text_file_exists(chapter_file):
         print(f"Error: 找不到第 {chapter_num} 章的草稿文件 {chapter_file}。请先生成草稿！")
         sys.exit(1)
 
@@ -298,7 +313,7 @@ def cmd_step4(args):
         max_tokens=llm.get("max_tokens", 8192),
         timeout=llm.get("timeout", 600)
     )
-    print(f"✅ 第 {chapter_num} 章定稿归档成功！全局摘要、角色状态已自动更新并沉淀到向量库。")
+    print(f"✅ 第 {chapter_num} 章定稿归档成功！角色状态已自动更新，并尝试沉淀到知识库。")
 
 def cmd_consistency(args):
     """一致性矛盾审查"""
@@ -312,21 +327,28 @@ def cmd_consistency(args):
         sys.exit(1)
 
     chapter_num = args.chapter or int(other.get("chapter_num", 1))
-    chapter_file = os.path.join(filepath, "chapters", f"chapter_{chapter_num}.txt")
-    if not os.path.exists(chapter_file):
+    chapter_file = os.path.join(chapters_drafts_dir(filepath), f"chapter_{chapter_num}.md")
+    if not text_file_exists(chapter_file):
         print(f"Error: 找不到第 {chapter_num} 章的正文文件 {chapter_file}。")
         sys.exit(1)
 
     chapter_text = read_file(chapter_file)
-    novel_setting = read_file(os.path.join(filepath, "Novel_architecture.txt"))
-    char_state = read_file(os.path.join(filepath, "character_state.txt"))
-    global_sum = read_file(os.path.join(filepath, "global_summary.txt"))
+    novel_setting = read_file(resolve_text_path(os.path.join(filepath, "novel_settings.md")))
+    char_state = read_file(os.path.join(filepath, "character_state.md"))
+    novel_directory = read_file(os.path.join(filepath, "novel_directory.md"))
+    foreshadowing = read_file(os.path.join(filepath, "foreshadowing_ledger.md"))
+    plot_arcs = read_file(os.path.join(filepath, "plot_arcs.md"))
+    memory_context = (
+        f"【章节蓝图】\n{novel_directory}\n\n"
+        f"【伏笔台账】\n{foreshadowing}\n\n"
+        f"【人物轨时间线】\n{plot_arcs}"
+    )
 
     print(f"🔄 正在对第 {chapter_num} 章进行剧情与设定一致性审查...")
     result = check_consistency(
         novel_setting=novel_setting,
         character_state=char_state,
-        global_summary=global_sum,
+        memory_context=memory_context,
         chapter_text=chapter_text,
         api_key=llm.get("api_key", ""),
         base_url=llm.get("base_url", ""),
@@ -356,8 +378,13 @@ def main():
     p_init.add_argument("--embedding-model-name", help="Embedding Model Name")
     p_init.add_argument("--embedding-interface-format", help="Embedding Format")
     p_init.add_argument("--embedding-retrieval-k", type=int, help="向量检索召回条数")
+    p_init.add_argument("--novel-name", help="小说名称")
     p_init.add_argument("--topic", help="小说核心故事主题")
     p_init.add_argument("--genre", help="小说流派类型")
+    p_init.add_argument("--target-audience", help="目标读者")
+    p_init.add_argument("--platform-style", help="平台风格")
+    p_init.add_argument("--writing-style", help="语言文笔风格")
+    p_init.add_argument("--pacing-requirement", help="节奏要求")
     p_init.add_argument("--num-chapters", type=int, help="章节总数")
     p_init.add_argument("--word-number", type=int, help="单章期望字数")
     p_init.add_argument("--filepath", help="项目保存本地路径")
@@ -371,8 +398,13 @@ def main():
     # step1命令
     p_step1 = subparsers.add_parser("step1-settings", help="Step 1: 生成小说总体设定")
     p_step1.add_argument("--filepath", help="覆盖配置文件中的保存路径")
+    p_step1.add_argument("--novel-name", help="覆盖小说名称")
     p_step1.add_argument("--topic", help="覆盖故事主题")
     p_step1.add_argument("--genre", help="覆盖流派类型")
+    p_step1.add_argument("--target-audience", help="覆盖目标读者")
+    p_step1.add_argument("--platform-style", help="覆盖平台风格")
+    p_step1.add_argument("--writing-style", help="覆盖语言文笔风格")
+    p_step1.add_argument("--pacing-requirement", help="覆盖节奏要求")
     p_step1.add_argument("--num-chapters", type=int, help="覆盖章节数")
     p_step1.add_argument("--word-number", type=int, help="覆盖单章字数")
     p_step1.add_argument("--guidance", help="给 AI 设定的补充内容指导")
@@ -424,3 +456,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

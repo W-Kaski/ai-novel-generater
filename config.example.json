@@ -47,8 +47,13 @@
         }
     },
     "other_params": {
+        "novel_name": "",
         "topic": "",
         "genre": "",
+        "target_audience": "",
+        "platform_style": "",
+        "writing_style": "",
+        "pacing_requirement": "",
         "num_chapters": 0,
         "word_number": 0,
         "filepath": "",

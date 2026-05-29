@@ -87,8 +87,13 @@ def create_config(config_file: str) -> dict:
         }
     },
     "other_params": {
+        "novel_name": "",
         "topic": "",
         "genre": "",
+        "target_audience": "",
+        "platform_style": "",
+        "writing_style": "",
+        "pacing_requirement": "",
         "num_chapters": 0,
         "word_number": 0,
         "filepath": "",
@@ -139,7 +144,7 @@ def save_config(config_data: dict, config_file: str) -> bool:
         logging.error(f"无法保存配置文件: {e}")
         return False
 
-def test_llm_config(interface_format, api_key, base_url, model_name, temperature, max_tokens, timeout, log_func, handle_exception_func):
+def test_llm_config(interface_format, api_key, base_url, model_name, temperature, max_tokens, timeout, log_func, handle_exception_func, run_sync=False):
     """测试当前的LLM配置是否可用"""
     def task():
         try:
@@ -165,9 +170,12 @@ def test_llm_config(interface_format, api_key, base_url, model_name, temperature
             log_func(f"❌ LLM配置测试出错: {str(e)}")
             handle_exception_func("测试LLM配置时出错")
 
-    threading.Thread(target=task, daemon=True).start()
+    if run_sync:
+        task()
+    else:
+        threading.Thread(target=task, daemon=True).start()
 
-def test_embedding_config(api_key, base_url, interface_format, model_name, log_func, handle_exception_func):
+def test_embedding_config(api_key, base_url, interface_format, model_name, log_func, handle_exception_func, run_sync=False):
     """测试当前的Embedding配置是否可用"""
     def task():
         try:
@@ -190,4 +198,7 @@ def test_embedding_config(api_key, base_url, interface_format, model_name, log_f
             log_func(f"❌ Embedding配置测试出错: {str(e)}")
             handle_exception_func("测试Embedding配置时出错")
 
-    threading.Thread(target=task, daemon=True).start()
+    if run_sync:
+        task()
+    else:
+        threading.Thread(target=task, daemon=True).start()

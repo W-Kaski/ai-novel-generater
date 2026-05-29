@@ -1,4 +1,4 @@
-# prompt_definitions.py
+﻿# prompt_definitions.py
 # -*- coding: utf-8 -*-
 """
 Centralized storage for all prompts, integrating the Snowflake Writing Method, Character Arc Theory, the Three-Element Suspense Model, etc.
@@ -270,7 +270,7 @@ chapter_blueprint_prompt = """\
 Based on the following elements:
 - Content guidance: {user_guidance}
 - Novel architecture:
-{novel_architecture}
+{novel_settings}
 
 Design the rhythm distribution for {number_of_chapters} chapters:
 1. Chapter cluster division:
@@ -314,7 +314,7 @@ chunked_chapter_blueprint_prompt = """\
 Based on the following elements:
 - Content guidance: {user_guidance}
 - Novel architecture:
-{novel_architecture}
+{novel_settings}
 
 The total rhythm distribution to be generated is {number_of_chapters} chapters.
 
@@ -359,25 +359,7 @@ Requirements:
 Output the final text only, do not explain anything.
 """
 
-# =============== 6. Previous Text Summary Update ===================
-summary_prompt = """\
-The following is the newly completed chapter text:
-{chapter_text}
-
-This is the current previous-text summary (may be empty):
-{global_summary}
-
-Please update the previous-text summary based on the new content from this chapter.
-Requirements:
-- Retain existing important information while incorporating new plot key points
-- Describe the overall progress of the book in concise, coherent language
-- Describe objectively; do not speculate or elaborate
-- Keep the total word count within 2000 words
-
-Return only the previous-text summary text, do not explain anything.
-"""
-
-# =============== 7. Character State Update ===================
+# =============== 6. Character State Update ===================
 create_character_state_prompt = """\
 Based on the current character dynamics setting: {character_dynamics}
 
@@ -542,8 +524,11 @@ Additional guidance (may not be specified): {user_guidance}
 # 8.2 Subsequent chapter draft prompt
 next_chapter_draft_prompt = """\
 Reference documents:
-└── Previous text summary:
-    {global_summary}
+└── Character timeline:
+    {plot_arcs}
+
+└── Foreshadowing ledger:
+    {foreshadowing_ledger}
 
 └── Previous chapter closing paragraph:
     {previous_chapter_excerpt}
@@ -689,3 +674,4 @@ def _inject_style_requirements(prompt_text):
 for _name in list(globals()):
     if (_name.endswith("_prompt") or _name.endswith("_Prompt")) and isinstance(globals()[_name], str):
         globals()[_name] = _inject_style_requirements(globals()[_name])
+
