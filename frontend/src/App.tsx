@@ -1,14 +1,14 @@
 // frontend/src/App.tsx
 import React, { useState, useEffect } from 'react';
 import { getChineseWordCount } from './utils/wordCount';
-import { 
-  getConfig, 
-  saveAppConfig, 
-  generateArchitecture, 
-  generateBlueprint, 
-  clearKnowledge, 
-  importKnowledge, 
-  watchFiles, 
+import {
+  getConfig,
+  saveAppConfig,
+  generateArchitecture,
+  generateBlueprint,
+  clearKnowledge,
+  importKnowledge,
+  watchFiles,
   saveFile,
   listChapters,
   getChapterContent,
@@ -17,7 +17,8 @@ import {
   finalizeChapter,
   checkConsistency,
   listRoles,
-  getWorldMap
+  getWorldMap,
+  API_BASE
 } from './api';
 import { AppConfig } from './types/novel';
 import LogTerminal from './components/LogTerminal';
@@ -675,7 +676,7 @@ export default function App() {
     } catch (e) {
       console.error("Failed to load config from server", e);
       setConfig(null);
-      setConfigError('未能连接到 AI 创作后端 `http://127.0.0.1:8000`。请确认后端服务已经启动。');
+      setConfigError(`未能连接到 AI 创作后端 \`${API_BASE}\`。请确认后端服务已经启动。`);
     } finally {
       setLoading(false);
     }

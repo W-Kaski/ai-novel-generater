@@ -1484,6 +1484,7 @@ def api_save_world_map(payload: SaveWorldMapPayload):
 
 if __name__ == "__main__":
     import uvicorn
-    # Launch on 8000; timeout_graceful_shutdown prevents lingering port after crash
-    uvicorn.run(app, host="127.0.0.1", port=8000, timeout_graceful_shutdown=1)
+    host = os.environ.get("NOVEL_SERVER_HOST", "127.0.0.1")
+    port = int(os.environ.get("NOVEL_SERVER_PORT", "8000"))
+    uvicorn.run(app, host=host, port=port, timeout_graceful_shutdown=1)
 

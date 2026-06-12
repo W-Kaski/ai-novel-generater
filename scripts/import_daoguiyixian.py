@@ -8,7 +8,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-SOURCE = Path(r"e:\download\道诡异仙.txt")
+SOURCE = Path(os.environ.get("IMPORT_SOURCE", r"e:\download\道诡异仙.txt"))
 ROOT = Path(__file__).resolve().parents[1]
 NOVEL = ROOT / "novels" / "道诡异仙"
 
